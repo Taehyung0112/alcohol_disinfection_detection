@@ -26,35 +26,40 @@ def is_hand_open(hand_landmarks):
 
     return avg_dist > 0.1  # 閾值可依影像解析度微調
 
-def detect_hands(frame):
+def detect_hands_and_draw(frame, w, h, dot_threshold=0.5):
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(rgb)
-    h, w, _ = frame.shape
-    valid_hands_xy = []
+    valid_hands = []
 
     if results.multi_hand_landmarks:
         print(f"🖐️ Detected {len(results.multi_hand_landmarks)} hand(s)")
         for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
-            wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
-            index_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
-            pinky_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+            try:
+                wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+                index_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+                pinky_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
 
-            wx, wy = int(wrist.x * w), int(wrist.y * h)
+                # Calculate palm normal vector
+                v1 = np.array([index_mcp.x - wrist.x, index_mcp.y - wrist.y, index_mcp.z - wrist.z])
+                v2 = np.array([pinky_mcp.x - wrist.x, pinky_mcp.y - wrist.y, pinky_mcp.z - wrist.z])
+                palm_normal = np.cross(v1, v2)
+                palm_normal_unit = palm_normal / (np.linalg.norm(palm_normal) + 1e-6)
 
-            # 計算掌心朝向
-            v1 = np.array([index_mcp.x - wrist.x, index_mcp.y - wrist.y, index_mcp.z - wrist.z])
-            v2 = np.array([pinky_mcp.x - wrist.x, pinky_mcp.y - wrist.y, pinky_mcp.z - wrist.z])
-            palm_normal = np.cross(v1, v2)
-            palm_normal_unit = palm_normal / (np.linalg.norm(palm_normal) + 1e-6)
-            dot = np.dot(palm_normal_unit, np.array([0, 0, -1]))  # -Z方向是掌心朝上
+                dot = np.dot(palm_normal_unit, np.array([0, 0, -1]))
 
-            # 驗證條件：掌心朝上 + 手掌打開
-            if dot > 0.5 and is_hand_open(hand_landmarks):
-                print(f"✅ Hand {i} upward (dot={dot:.2f}) and open at ({wx},{wy})")
-                valid_hands_xy.append((wx, wy))
+                x = int(wrist.x * w)
+                y = int(wrist.y * h)
+
                 mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                cv2.circle(frame, (wx, wy), 6, (0, 255, 0), -1)
-            else:
-                print(f"❌ Hand {i} rejected (dot={dot:.2f}, open={is_hand_open(hand_landmarks)})")
+                cv2.circle(frame, (x, y), 6, (0, 0, 255), -1)
 
-    return valid_hands_xy
+                if dot > dot_threshold:
+                    print(f"✅ Hand {i} upward (dot={dot:.2f}) at ({x},{y})")
+                    valid_hands.append((x, y))
+
+            except Exception as e:
+                print(f"⚠️ Hand landmark error: {e}")
+                continue
+
+    return valid_hands
+

@@ -2,7 +2,7 @@ import os
 import cv2
 import time
 from ultralytics import YOLO
-from mediapipe_utils.hand_detector import detect_hands
+from mediapipe_utils.hand_detector import detect_hands_and_draw
 from core.dispenser_detection import detect_dispenser
 from core.people_utils import draw_people_boxes
 from core.tracking_logic import (
@@ -56,7 +56,7 @@ while True:
 
     if dispenser_roi:
         results_people = model_people.track(frame, persist=True, tracker="botsort.yaml")
-        hands_xy = detect_hands(frame)
+        hands_xy = detect_hands_and_draw(frame, w, h, dot_threshold=0.4)
         people_boxes = draw_people_boxes(results_people, frame)
         zone = compute_disinfection_zone(dispenser_roi)
         frame = draw_disinfection_zone(frame, zone)
